@@ -7,7 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+    """Application settings loaded from environment variables.
+    Environment variables can be set in a .env file or directly in the environment.
+    """
 
     model_config = SettingsConfigDict(
         env_file=".env",
