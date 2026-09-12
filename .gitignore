@@ -6,3 +6,4 @@
 .langgraph_api/
 *.db
 .env
+.venv
