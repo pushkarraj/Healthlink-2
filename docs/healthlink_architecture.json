@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "HealthLink — System Architecture",
+    "output": "healthlink_architecture.html",
+    "quality_profile": "showcase",
+    "viewBox": [1360, 560],
+    "views": [
+      { "id": "request-path", "label": "Request path", "focus": ["client", "fastapi", "orchestrator", "symptom", "summary"], "note": "Follow a health assessment from the client through the orchestrated agent pipeline." },
+      { "id": "ai-orchestration", "label": "AI & orchestration", "focus": ["orchestrator", "symptom", "doctor", "scheduling", "summary", "gemini"], "note": "The four agents run in sequence and each calls Gemini through one LLM function." },
+      { "id": "data-and-rag", "label": "Data & RAG", "focus": ["symptom", "doctor", "gemini", "pinecone", "sqlite"], "note": "Pinecone provides RAG context; SQLite backs doctors and appointments." },
+      { "id": "config-deploy", "label": "Config & deploy", "focus": ["config", "fastapi", "gemini", "pinecone", "sqlite"], "note": "Environment variables feed the app and its external services." }
+    ]
+  },
+  "components": [
+    { "id": "client", "type": "external", "label": "Client", "sublabel": "Streamlit · curl · docs", "pos": [20, 150], "size": [170, 66] },
+    { "id": "config", "type": "security", "label": "Config & Environment", "sublabel": "pydantic-settings · .env", "tag": "validate_config()", "pos": [300, 30], "size": [190, 74] },
+    { "id": "fastapi", "type": "backend", "label": "FastAPI · main.py", "sublabel": "CORS · routes · lifespan", "pos": [300, 150], "size": [190, 66] },
+    { "id": "orchestrator", "type": "backend", "label": "Orchestrator", "sublabel": "orchestrate pipeline", "pos": [540, 150], "size": [175, 66] },
+    { "id": "symptom", "type": "backend", "label": "1 · Symptom Agent", "sublabel": "symptoms · urgency", "pos": [540, 280], "size": [175, 76] },
+    { "id": "doctor", "type": "backend", "label": "2 · Doctor Agent", "sublabel": "specialty · top-3", "pos": [740, 280], "size": [175, 76] },
+    { "id": "scheduling", "type": "backend", "label": "3 · Scheduling Agent", "sublabel": "slots · urgency", "pos": [940, 280], "size": [175, 76] },
+    { "id": "summary", "type": "backend", "label": "4 · Summary Agent", "sublabel": "synthesis · disclaimer", "pos": [1140, 280], "size": [175, 76] },
+    { "id": "gemini", "type": "external", "label": "Google Gemini", "sublabel": "LLM + embeddings", "tag": "GEMINI_API_KEY", "pos": [470, 440], "size": [205, 86] },
+    { "id": "pinecone", "type": "cloud", "label": "Pinecone", "sublabel": "vector store (RAG)", "tag": "PINECONE_API_KEY", "pos": [720, 440], "size": [195, 86] },
+    { "id": "sqlite", "type": "database", "label": "SQLite · SQLAlchemy", "sublabel": "doctors · appts · logs", "tag": "DATABASE_URL", "pos": [960, 440], "size": [205, 86] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Agent pipeline · sequential orchestration", "wraps": ["symptom", "doctor", "scheduling", "summary"], "pad": 22 }
+  ],
+  "connections": [
+    { "id": "client-req", "from": "client", "to": "fastapi", "label": "POST /api/v1/assess", "variant": "emphasis" },
+    { "id": "cfg-app", "from": "config", "to": "fastapi", "label": "load settings", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelAt": [395, 127] },
+    { "id": "app-orch", "from": "fastapi", "to": "orchestrator" },
+    { "id": "orch-symptom", "from": "orchestrator", "to": "symptom", "label": "pipeline", "fromSide": "bottom", "toSide": "top", "labelAt": [628, 247] },
+    { "id": "s-d", "from": "symptom", "to": "doctor" },
+    { "id": "d-sc", "from": "doctor", "to": "scheduling" },
+    { "id": "sc-su", "from": "scheduling", "to": "summary" },
+    { "id": "symptom-llm", "from": "symptom", "to": "gemini", "label": "LLM · llm_generate()", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelAt": [545, 400] },
+    { "id": "symptom-rag", "from": "symptom", "to": "pinecone", "label": "retrieve (RAG)", "fromSide": "bottom", "toSide": "top", "labelAt": [772, 400] },
+    { "id": "doctor-db", "from": "doctor", "to": "sqlite", "label": "query by specialty", "fromSide": "bottom", "toSide": "top" }
+  ],
+  "cards": [
+    { "dot": "violet", "title": "AI & Orchestration", "items": ["Orchestrator runs 4 agents in sequence", "Each agent calls Gemini via core.llm.llm_generate()", "Structured output → retry → text fallback", "Symptom agent enriches with Pinecone RAG"] },
+    { "dot": "amber", "title": "Environment variables", "items": ["GEMINI_API_KEY (required)", "PINECONE_API_KEY (required)", "DATABASE_URL = sqlite:///./data/healthlink.db", "LLM_MODEL_NAME · RAG_TOP_K · LOG_LEVEL"] },
+    { "dot": "emerald", "title": "Data & RAG", "items": ["SQLite: doctors · appointments · session_logs", "Pinecone: symptom KB embeddings, top-k", "Seeded from doctors.csv + symptoms_kb.json"] },
+    { "dot": "cyan", "title": "Deployment", "items": ["Dockerfile + docker-compose (uvicorn :8000)", "GitHub Actions → Google Cloud Run", "Hugging Face Spaces (alt target)"] }
+  ]
+}
