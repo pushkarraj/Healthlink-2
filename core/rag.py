@@ -60,17 +60,39 @@ class EmbeddingClient:
         else:
             return self.embeddings.embed_query(text)
 
-    def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    def embed_texts(
+        self,
+        texts: List[str],
+        batch_size: int = 100,
+        delay_seconds: float = 60.0,
+    ) -> List[List[float]]:
         """
-        Embed multiple texts (for document indexing).
+        Embed multiple texts (for document indexing), throttled to respect
+        the Gemini free-tier limit of 100 embed requests/minute.
 
         Args:
             texts: List of texts to embed
+            batch_size: Texts per batch (default 100 = free-tier per-minute cap)
+            delay_seconds: Pause between batches; set to 0 on a paid/higher tier
 
         Returns:
             List of embedding vectors
         """
-        return self.embeddings.embed_documents(texts)
+        if not texts:
+            return []
+
+        all_embeddings: List[List[float]] = []
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start:start + batch_size]
+            all_embeddings.extend(self.embeddings.embed_documents(batch))
+            # ponytail: fixed sleep to stay under free-tier 100 req/min; lower/zero on paid tier
+            if delay_seconds and start + batch_size < len(texts):
+                logger.info(
+                    f"Embedded {start + len(batch)}/{len(texts)}; "
+                    f"sleeping {delay_seconds}s to respect rate limit"
+                )
+                sleep(delay_seconds)
+        return all_embeddings
 
 
 class VectorStore:
@@ -83,9 +105,6 @@ class VectorStore:
 
         self.pc = Pinecone(api_key=settings.pinecone_api_key)
 
-        sample_embedding = self.embedding_client.embed_text("sample", is_query=False)
-        self.dimension = len(sample_embedding)
-
         self.initialize_index()
 
         logger.info(f"Vector store initialized with Pinecone index: {self.index_name}")
@@ -96,9 +115,11 @@ class VectorStore:
 
         if self.index_name not in existing_indexes:
             logger.info(f"Creating new Pinecone index: {self.index_name}")
+            # Only embed a sample to learn the dimension when we actually create the index.
+            dimension = len(self.embedding_client.embed_text("sample", is_query=False))
             self.pc.create_index(
                 name=self.index_name,
-                dimension=self.dimension,
+                dimension=dimension,
                 metric="cosine",
                 spec=ServerlessSpec(
                     cloud="aws",
@@ -159,6 +180,12 @@ class VectorStore:
             logger.info(f"Upserted batch {i // batch_size + 1} ({len(batch)} vectors)")
 
         logger.info(f"Added {len(pending_documents)} documents to Pinecone index")
+
+    def vector_count(self) -> int:
+        """Return how many vectors are already in the index (0 if empty/new)."""
+        stats = self.index.describe_index_stats()
+        # pinecone v3 returns an object; fall back to dict access defensively.
+        return getattr(stats, "total_vector_count", None) or stats.get("total_vector_count", 0)
 
     def search(self, query: str, k: int = 5) -> RetrievalResult:
         """
@@ -280,6 +307,13 @@ def load_knowledge_base(file_path: str, settings: Settings) -> None:
     logger.info(f"Loading knowledge base from {file_path}")
 
     try:
+        # Skip embedding entirely if the index is already populated.
+        vector_store = get_vector_store(settings)
+        existing = vector_store.vector_count()
+        if existing > 0:
+            logger.info(f"Pinecone index already has {existing} vectors; skipping embedding/upsert")
+            return
+
         with open(file_path, 'r') as f:
             data = json.load(f)
 
@@ -309,7 +343,6 @@ def load_knowledge_base(file_path: str, settings: Settings) -> None:
                     metadata={"source": key}
                 ))
 
-        vector_store = get_vector_store(settings)
         vector_store.add_documents(documents)
 
         logger.info(f"Loaded {len(documents)} document chunks into vector store")
