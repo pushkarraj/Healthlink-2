@@ -53,6 +53,15 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          PINECONE_ENVIRONMENT: ${{ vars.PINECONE_ENVIRONMENT }}
+          PINECONE_INDEX_NAME: ${{ vars.PINECONE_INDEX_NAME }}
+          LLM_MODEL_NAME: ${{ vars.LLM_MODEL_NAME }}
+          EMBEDDING_MODEL_NAME: ${{ vars.EMBEDDING_MODEL_NAME }}
+          DATABASE_URL: ${{ vars.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_RUN_SERVICE_NAME: ${{ vars.CLOUD_RUN_SERVICE_NAME }}
         run: |
           pytest tests/ -v --cov=. --cov-report=xml --cov-report=term || true
 
@@ -79,12 +88,13 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
+        uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker for GCR
         run: |
@@ -112,8 +122,8 @@ jobs:
             --timeout 300 \
             --max-instances 10 \
             --min-instances 0 \
-            --set-env-vars "LOG_LEVEL=INFO" \
-            --set-secrets "GEMINI_API_KEY=GEMINI_API_KEY:latest,PINECONE_API_KEY=PINECONE_API_KEY:latest"
+            --set-env-vars "LOG_LEVEL=${{ vars.LOG_LEVEL }},LLM_MODEL_NAME=${{ vars.LLM_MODEL_NAME }},EMBEDDING_MODEL_NAME=${{ vars.EMBEDDING_MODEL_NAME }},PINECONE_ENVIRONMENT=${{ vars.PINECONE_ENVIRONMENT }},PINECONE_INDEX_NAME=${{ vars.PINECONE_INDEX_NAME }},DATABASE_URL=${{ vars.DATABASE_URL }},GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},GCP_REGION=${{ vars.GCP_REGION }},CLOUD_RUN_SERVICE_NAME=${{ vars.CLOUD_RUN_SERVICE_NAME }}" \
+            --set-secrets "GEMINI_API_KEY=GEMINI_API_KEY:latest,PINECONE_API_KEY=PINECONE_API_KEY:latest,SECRET_KEY=SECRET_KEY:latest"
 
       - name: Get service URL
         run: |
