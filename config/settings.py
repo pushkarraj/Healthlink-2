@@ -19,13 +19,13 @@ class Settings(BaseSettings):
     )
 
     # LLM Configuration (Gemini only - using langchain-google-genai)
-    gemini_api_key: str = "dummy_+key"
+    gemini_api_key: str = ""
     llm_model_name: str = "gemini-3.6-flash"  # gemini-2.0-flash retired (404); 3.6-flash is current
     llm_temperature: float = 0.2
     llm_max_tokens: int = 2048
 
     # Embedding Configuration
-    embedding_model_name: str = "models/gemini-embedding-001"  # Latest embedding model
+    embedding_model_name: str = "models/gemini-embedding-2"  # Latest embedding model
 
     # Pinecone Configuration
     pinecone_api_key: str = ""
