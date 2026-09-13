@@ -120,13 +120,27 @@ class VectorStore:
         if not documents:
             return
 
-        texts = [doc.content for doc in documents]
+        existing_count = self.get_stats()["total_vector_count"]
+        if existing_count >= len(documents):
+            logger.info(
+                f"Pinecone index already contains {existing_count} vectors; "
+                f"skipping upsert for {len(documents)} documents"
+            )
+            return
 
-        logger.info(f"Generating embeddings for {len(texts)} documents")
+        pending_documents = documents[existing_count:]
+        texts = [doc.content for doc in pending_documents]
+
+        logger.info(
+            f"Pinecone index contains {existing_count} of {len(documents)} vectors; "
+            f"generating embeddings for {len(texts)} missing documents"
+        )
         embeddings = self.embedding_client.embed_texts(texts)
 
         vectors = []
-        for i, (doc, embedding) in enumerate(zip(documents, embeddings)):
+        for i, (doc, embedding) in enumerate(
+            zip(pending_documents, embeddings), start=existing_count
+        ):
             vector_id = f"doc_{i}_{hash(doc.content)}"
             metadata = {
                 "content": doc.content,
@@ -144,7 +158,7 @@ class VectorStore:
             self.index.upsert(vectors=batch)
             logger.info(f"Upserted batch {i // batch_size + 1} ({len(batch)} vectors)")
 
-        logger.info(f"Added {len(documents)} documents to Pinecone index")
+        logger.info(f"Added {len(pending_documents)} documents to Pinecone index")
 
     def search(self, query: str, k: int = 5) -> RetrievalResult:
         """
