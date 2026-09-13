@@ -155,3 +155,8 @@ class RetrievalResult(BaseModel):
     documents: List[Document] = Field(..., description="Retrieved documents")
     scores: List[float] = Field(..., description="Relevance scores")
     query: str = Field(..., description="Original query")
+
+
+class SlotSelection(BaseModel):
+            recommended_slot_id: str = Field(..., description="ID of recommended slot")
+            scheduling_notes: str = Field(..., description="Scheduling notes")
